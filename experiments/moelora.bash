@@ -14,7 +14,7 @@ MAX_SOURCE_LENGTH=1024
 peft_path=""  
 
 # # Training Command
-deepspeed --num_gpus=4 --master_port $MASTER_PORT run_mlora.py \
+deepspeed --num_gpus=1 --master_port $MASTER_PORT run_mlora.py \ # num_gpus==4>1 (March13)
     --deepspeed src/ds.config \
     --do_train \
     --train_file $your_data_path/train.json \
@@ -42,7 +42,7 @@ deepspeed --num_gpus=4 --master_port $MASTER_PORT run_mlora.py \
     --lora_name moelora \
     --expert_num 8
 
-deepspeed --num_gpus=4 --master_port $MASTER_PORT run_mlora.py \
+deepspeed --num_gpus=1 --master_port $MASTER_PORT run_mlora.py \
     --do_predict \
     --test_file $your_data_path/test.json \
     --cache_dir $your_data_path \
