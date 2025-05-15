@@ -38,7 +38,12 @@ class MMOELoraConfig(LoraConfig):
     """
     task_num: int = field(default=2, metadata={"help": "The number of tasks."})
     task_embedding_dim: int = field(default=64)
-    expert_num: int = field(default=4)
+    outer_expert_num: int = field(default=2) #22
+    inner_expert_num: int = field(default=4) #22
+
+    @property #22
+    def expert_num(self):
+        return self.outer_expert_num * self.inner_expert_num
 
     def __post_init__(self):
         self.peft_type = PeftType.MMOELORA
@@ -90,7 +95,9 @@ class MMOELoraModel(LoraModel):
             "init_lora_weights": lora_config.init_lora_weights,
             "task_num": lora_config.task_num,
             "task_embedding_dim": lora_config.task_embedding_dim,
-            "expert_num": lora_config.expert_num,
+            "outer_expert_num": lora_config.outer_expert_num, #22
+            "inner_expert_num": lora_config.inner_expert_num, #22
+            "expert_num": lora_config.expert_num,  # now a property
         }
         key_list = [key for key, _ in self.model.named_modules()]   # all module in raw model
         for key in key_list:
