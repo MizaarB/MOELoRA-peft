@@ -483,11 +483,12 @@ class Linear(nn.Linear, LoraLayer):
             )
             self.merged = False
 
-    def forward(self, x: torch.Tensor, **kwargs):
+    def forward(self, x: torch.Tensor, expert_mask=None, **kwargs):
         previous_dtype = x.dtype
 
         if self.active_adapter not in self.lora_A.keys():
             return F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
+
         if self.disable_adapters:
             if self.r[self.active_adapter] > 0 and self.merged:
                 self.unmerge()
@@ -495,20 +496,33 @@ class Linear(nn.Linear, LoraLayer):
         elif self.r[self.active_adapter] > 0 and not self.merged:
             result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
-            x = x.to(self.lora_A[self.active_adapter].weight.dtype)
+            if expert_mask is not None:
+                # Expect expert_mask shape [num_experts], dtype=torch.bool or torch.int
+                expert_mask = expert_mask.bool()
+                x = x.to(self.lora_A[self.active_adapter][0].weight.dtype)
 
-            result += (
-                self.lora_B[self.active_adapter](
-                    self.lora_A[self.active_adapter](self.lora_dropout[self.active_adapter](x))
+                for idx, use in enumerate(expert_mask):
+                    if use:
+                        lora_out = self.lora_B[self.active_adapter][idx](
+                            self.lora_A[self.active_adapter][idx](
+                                self.lora_dropout[self.active_adapter][idx](x)
+                            )
+                        )
+                        result += lora_out * self.scaling[self.active_adapter][idx]
+            else:
+                # Fallback to old logic
+                x = x.to(self.lora_A[self.active_adapter].weight.dtype)
+                result += (
+                    self.lora_B[self.active_adapter](
+                        self.lora_A[self.active_adapter](self.lora_dropout[self.active_adapter](x))
+                    )
+                    * self.scaling[self.active_adapter]
                 )
-                * self.scaling[self.active_adapter]
-            )
         else:
             result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
-        result = result.to(previous_dtype)
+        return result.to(previous_dtype)
 
-        return result
 
 
 if is_bnb_available():
