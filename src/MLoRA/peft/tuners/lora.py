@@ -451,6 +451,24 @@ class Linear(nn.Linear, LoraLayer):
         self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights)
         self.active_adapter = adapter_name
 
+        # Optional: Support for nested expert structure
+        self.outer_expert_num = kwargs.get("outer_expert_num", 1)
+        self.inner_expert_num = kwargs.get("inner_expert_num", r)  # fallback to r if undefined
+        self.total_experts = self.outer_expert_num * self.inner_expert_num
+
+        # Initialize expert-specific LoRA weights (1D)
+        self.lora_A[adapter_name] = nn.ModuleList([
+            nn.Linear(in_features, r, bias=False) for _ in range(self.total_experts)
+        ])
+        self.lora_B[adapter_name] = nn.ModuleList([
+            nn.Linear(r, out_features, bias=False) for _ in range(self.total_experts)
+        ])
+        self.lora_dropout[adapter_name] = nn.ModuleList([
+            nn.Dropout(lora_dropout) for _ in range(self.total_experts)
+        ])
+        self.scaling[adapter_name] = [lora_alpha / r] * self.total_experts
+
+
     def merge(self):
         if self.active_adapter not in self.lora_A.keys():
             return
