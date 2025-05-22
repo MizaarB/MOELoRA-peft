@@ -60,6 +60,30 @@ class MMOELoraModel(LoraModel):
         self.peft_config = config
         self.add_adapter(adapter_name, self.peft_config[adapter_name])
 
+    def forward(self, *args, task_id=None, **kwargs):
+        """
+        Custom forward that injects expert_mask based on task_id.
+        """
+        # Fetch expert structure
+        config = list(self.peft_config.values())[0]
+        total_experts = config.outer_expert_num * config.inner_expert_num
+
+        # Safety: fallback to all-expert active if task_id is None
+        if task_id is None:
+            expert_mask = torch.ones(total_experts, dtype=torch.bool, device=self.model.device)
+        else:
+            # Simple fixed mapping: activate 2 experts per task
+            # E.g., task_id 0 → [0, 1], task_id 1 → [2, 3]...
+            experts_per_task = 2
+            start = (task_id * experts_per_task) % total_experts
+            active_ids = list(range(start, start + experts_per_task))
+            expert_mask = torch.zeros(total_experts, dtype=torch.bool, device=self.model.device)
+            expert_mask[active_ids] = True
+
+        # Forward through wrapped model with expert_mask
+        return self.model(*args, expert_mask=expert_mask, **kwargs)
+
+
 
     def add_adapter(self, adapter_name, config=None):
         if config is not None:  # get the lora config
